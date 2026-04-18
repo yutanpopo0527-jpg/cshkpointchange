@@ -433,36 +433,40 @@
         </div>
       );
 
+      // --- 通常ログイン画面 ---
       if (activeView === 'login') {
         return (
-          <div className="min-h-screen flex flex-col items-center justify-center p-6 relative">
-            <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full border-4 border-orange-200 z-10">
-              <div className="text-center mb-8">
-                <div className="bg-orange-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <IconStar className="text-orange-500 w-12 h-12" />
+          <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 relative">
+            <div className="bg-white rounded-3xl shadow-xl p-5 sm:p-8 max-w-md w-full border-4 border-orange-200 z-10">
+              <div className="text-center mb-6 sm:mb-8">
+                {/* ★ 元の星アイコンに戻しました */}
+                <div className="bg-orange-100 w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <IconStar className="text-orange-500 w-10 h-10 sm:w-12 sm:h-12" />
                 </div>
-                <h1 className="text-2xl font-bold text-gray-800">けいひんをえらぼう！</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-800">けいひんをえらぼう！</h1>
               </div>
               
-              <div className="space-y-6">
+              <div className="space-y-5 sm:space-y-6">
                 <div>
-                  <label className="block text-gray-600 font-bold mb-2 text-sm">かいいんIDを にゅうりょく</label>
+                  <label className="block text-gray-600 font-bold mb-2 text-xs sm:text-sm">かいいんIDを にゅうりょく</label>
                   <div className="flex gap-2">
-                    <input type="text" value={inputMemberId} onChange={(e) => setInputMemberId(e.target.value)} placeholder="例: 12345" className="flex-1 bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 font-bold text-lg focus:border-orange-400 focus:outline-none" />
-                    <button onClick={() => handleLoginSubmit(inputMemberId)} className="bg-orange-500 text-white px-6 rounded-xl font-bold hover:bg-orange-600 active:scale-95 transition-transform">OK</button>
+                    {/* ★ min-w-0 を追加してスマホ画面でしっかり縮むように修正 */}
+                    <input type="text" value={inputMemberId} onChange={(e) => setInputMemberId(e.target.value)} placeholder="例: 12345" className="flex-1 min-w-0 bg-gray-50 border-2 border-gray-200 rounded-xl px-3 sm:px-4 py-3 font-bold text-base sm:text-lg focus:border-orange-400 focus:outline-none" />
+                    {/* ★ shrink-0 を追加してボタンが潰れないように修正 */}
+                    <button onClick={() => handleLoginSubmit(inputMemberId)} className="shrink-0 bg-orange-500 text-white px-5 sm:px-6 rounded-xl font-bold hover:bg-orange-600 active:scale-95 transition-transform">OK</button>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="h-px bg-gray-200 flex-1"></div><span className="text-gray-400 font-bold text-sm">または</span><div className="h-px bg-gray-200 flex-1"></div>
                 </div>
-                <button onClick={() => setIsScanning(true)} className="w-full py-4 bg-blue-500 text-white font-bold text-lg rounded-2xl flex items-center justify-center gap-3 shadow-[0_4px_0_#1d4ed8] active:shadow-[0_0px_0_#1d4ed8] active:translate-y-1 transition-all">
+                <button onClick={() => setIsScanning(true)} className="w-full py-3 sm:py-4 bg-blue-500 text-white font-bold text-base sm:text-lg rounded-2xl flex items-center justify-center gap-3 shadow-[0_4px_0_#1d4ed8] active:shadow-[0_0px_0_#1d4ed8] active:translate-y-1 transition-all">
                   <IconQrCode className="w-6 h-6" />QRコードで ログイン
                 </button>
               </div>
 
-              <div className="mt-12 pt-6 border-t border-gray-100 text-center">
+              <div className="mt-8 sm:mt-12 pt-6 border-t border-gray-100 text-center">
                 <p className="text-xs text-gray-400 mb-2">※はじめてであそんでみたい人向け</p>
-                <button onClick={handleTestUserCreation} className="text-sm font-bold text-orange-500 bg-orange-50 px-4 py-2 rounded-full">テスト用データを作ってあそぶ</button>
+                <button onClick={handleTestUserCreation} className="text-xs sm:text-sm font-bold text-orange-500 bg-orange-50 px-4 py-2 rounded-full">テスト用データを作ってあそぶ</button>
               </div>
             </div>
 
