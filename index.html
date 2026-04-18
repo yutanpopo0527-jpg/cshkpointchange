@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ポイント管理アプリ</title>
+  
+  <!-- Tailwind CSS (スタイリング用) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- html5-qrcode (QRコード読み取り用ライブラリ) -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  
+  <style>
+    /* カメラ映像のコンテナを少し整えるためのカスタムスタイル */
+    #reader video {
+      border-radius: 0.5rem;
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-start sm:items-center justify-center p-4 sm:p-6 font-sans">
+
+  <!-- メインコンテナ (モバイルファースト設計) -->
+  <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-5 sm:p-6 space-y-6">
+    <h1 class="text-2xl font-bold text-center text-slate-800">ポイント管理</h1>
+
+    <!-- 処理結果などを表示するメッセージエリア (初期は非表示) -->
+    <div id="messageArea" class="hidden transition-all duration-300"></div>
+
+    <!-- ==========================================
+         1. ID読み取りセクション
+         ========================================== -->
+    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+      
+      <!-- カメラスキャンエリア -->
+      <div>
+        <button id="startCameraBtn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 active:bg-blue-800 transition-colors flex justify-center items-center gap-2">
+          <!-- カメラアイコン (SVG) -->
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+          </svg>
+          カメラでQRコードをスキャン
+        </button>
+
+        <!-- スキャン中のみ表示されるキャンセルボタン -->
+        <button id="stopCameraBtn" class="hidden w-full mt-2 bg-slate-200 text-slate-700 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 active:bg-slate-400 transition-colors">
+          スキャンをキャンセル
+        </button>
+
+        <!-- カメラ映像が表示される領域 -->
+        <div id="reader" class="mt-4 w-full hidden overflow-hidden rounded-lg"></div>
+      </div>
+
+      <div class="flex items-center">
+        <div class="flex-grow border-t border-slate-300"></div>
+        <span class="px-3 text-sm text-slate-400 font-medium">または</span>
+        <div class="flex-grow border-t border-slate-300"></div>
+      </div>
+
+      <!-- 手動 / 外部リーダー用入力欄 -->
+      <div>
+        <label for="userIdInput" class="block text-sm font-bold text-slate-700 mb-1">手動入力・外部リーダー</label>
+        <input 
+          type="text" 
+          id="userIdInput" 
+          class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-lg" 
+          placeholder="会員IDを入力してEnter" 
+          autocomplete="off"
+        >
+      </div>
+    </div>
+
+    <!-- ==========================================
+         2. 会員情報セクション (初期非表示)
+         ========================================== -->
+    <div id="memberInfo" class="hidden bg-indigo-50 p-5 rounded-xl border border-indigo-200 transition-all">
+      <div class="flex justify-between items-center mb-2">
+        <span class="text-sm font-semibold text-indigo-800">会員情報</span>
+        <span class="text-xs bg-indigo-200 text-indigo-800 px-2 py-1 rounded-full font-bold">認証済</span>
+      </div>
+      <p class="text-sm text-slate-600 mb-1">ID: <span id="displayUserId" class="font-bold text-slate-900 font-mono tracking-wider">---</span></p>
+      <!-- 出席簿と連動して名前を表示するエリア -->
+      <p class="text-lg font-bold text-slate-800 mb-3"><span id="displayUserName">---</span> <span class="text-sm font-normal text-slate-500">さん</span></p>
+      
+      <div class="bg-white p-4 rounded-lg shadow-sm text-center border border-indigo-100">
+        <p class="text-xs text-slate-500 font-bold mb-1">現在のポイント残高</p>
+        <p class="text-5xl font-extrabold text-indigo-600 tracking-tighter"><span id="displayPointBalance">0</span> <span class="text-lg font-bold text-slate-400">pt</span></p>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         3. ポイント操作セクション (初期非表示・無効)
+         ========================================== -->
+    <div id="operationSection" class="opacity-50 pointer-events-none transition-opacity duration-300 space-y-6 pt-4 border-t border-slate-200">
+      
+      <!-- 【追加・改善】出席記録 (青系) -->
+      <div>
+        <h3 class="text-sm font-bold text-slate-700 mb-2">📅 出席管理</h3>
+        <button 
+          id="markAttendanceBtn" 
+          class="w-full bg-blue-500 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-blue-600 active:bg-blue-700 transition-colors"
+        >
+          出席を記録する
+        </button>
+      </div>
+
+      <!-- ポイント付与 (緑系) -->
+      <div>
+        <h3 class="text-sm font-bold text-slate-700 mb-2">➕ ポイントを付与する</h3>
+        <!-- 任意のポイント数を入力 -->
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input 
+            type="number" 
+            id="addPointInput" 
+            class="flex-1 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-lg text-center sm:text-left" 
+            placeholder="任意の数を入力 (例: 15)" 
+            min="1" 
+          >
+          <button 
+            id="addPointBtn" 
+            class="bg-emerald-500 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-emerald-600 active:bg-emerald-700 transition-colors whitespace-nowrap"
+          >
+            付与する
+          </button>
+        </div>
+        
+        <!-- ワンクリック付与ボタン -->
+        <div class="grid grid-cols-5 gap-2 mt-3">
+          <button class="quick-add-btn bg-emerald-100 text-emerald-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-emerald-200 active:bg-emerald-300 transition-colors" data-point="10">+10</button>
+          <button class="quick-add-btn bg-emerald-100 text-emerald-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-emerald-200 active:bg-emerald-300 transition-colors" data-point="20">+20</button>
+          <button class="quick-add-btn bg-emerald-100 text-emerald-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-emerald-200 active:bg-emerald-300 transition-colors" data-point="30">+30</button>
+          <button class="quick-add-btn bg-emerald-100 text-emerald-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-emerald-200 active:bg-emerald-300 transition-colors" data-point="40">+40</button>
+          <button class="quick-add-btn bg-emerald-100 text-emerald-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-emerald-200 active:bg-emerald-300 transition-colors" data-point="50">+50</button>
+          <button class="quick-add-btn bg-emerald-100 text-emerald-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-emerald-200 active:bg-emerald-300 transition-colors" data-point="60">+60</button>
+          <button class="quick-add-btn bg-emerald-100 text-emerald-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-emerald-200 active:bg-emerald-300 transition-colors" data-point="70">+70</button>
+          <button class="quick-add-btn bg-emerald-100 text-emerald-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-emerald-200 active:bg-emerald-300 transition-colors" data-point="80">+80</button>
+          <button class="quick-add-btn bg-emerald-100 text-emerald-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-emerald-200 active:bg-emerald-300 transition-colors" data-point="90">+90</button>
+          <button class="quick-add-btn bg-emerald-100 text-emerald-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-emerald-200 active:bg-emerald-300 transition-colors" data-point="100">+100</button>
+        </div>
+      </div>
+      
+      <!-- ポイント使用 (オレンジ系) -->
+      <div class="pt-4 border-t border-slate-100">
+        <h3 class="text-sm font-bold text-slate-700 mb-2">➖ ポイントを使用する</h3>
+        <!-- 任意のポイント数を入力 -->
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input 
+            type="number" 
+            id="usePointInput" 
+            class="flex-1 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-lg text-center sm:text-left" 
+            placeholder="任意の数を入力 (例: 15)" 
+            min="1" 
+          >
+          <button 
+            id="usePointBtn" 
+            class="bg-amber-500 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-amber-600 active:bg-amber-700 transition-colors whitespace-nowrap"
+          >
+            使用する
+          </button>
+        </div>
+
+        <!-- ワンクリック使用ボタン -->
+        <div class="grid grid-cols-5 gap-2 mt-3">
+          <button class="quick-use-btn bg-amber-100 text-amber-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-amber-200 active:bg-amber-300 transition-colors" data-point="10">-10</button>
+          <button class="quick-use-btn bg-amber-100 text-amber-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-amber-200 active:bg-amber-300 transition-colors" data-point="20">-20</button>
+          <button class="quick-use-btn bg-amber-100 text-amber-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-amber-200 active:bg-amber-300 transition-colors" data-point="30">-30</button>
+          <button class="quick-use-btn bg-amber-100 text-amber-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-amber-200 active:bg-amber-300 transition-colors" data-point="40">-40</button>
+          <button class="quick-use-btn bg-amber-100 text-amber-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-amber-200 active:bg-amber-300 transition-colors" data-point="50">-50</button>
+          <button class="quick-use-btn bg-amber-100 text-amber-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-amber-200 active:bg-amber-300 transition-colors" data-point="60">-60</button>
+          <button class="quick-use-btn bg-amber-100 text-amber-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-amber-200 active:bg-amber-300 transition-colors" data-point="70">-70</button>
+          <button class="quick-use-btn bg-amber-100 text-amber-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-amber-200 active:bg-amber-300 transition-colors" data-point="80">-80</button>
+          <button class="quick-use-btn bg-amber-100 text-amber-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-amber-200 active:bg-amber-300 transition-colors" data-point="90">-90</button>
+          <button class="quick-use-btn bg-amber-100 text-amber-700 font-bold py-2 text-sm sm:text-base rounded shadow-sm hover:bg-amber-200 active:bg-amber-300 transition-colors" data-point="100">-100</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       Firebase & アプリケーションロジック
+       ========================================== -->
+  <script type="module">
+    // Firebase SDK v10 (モジュラー版) のインポート
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+    // ------------------------------------------
+    // 【要件4】Firebaseの設定情報 (プレースホルダー)
+    // ※実稼働させる際は、ご自身のFirebaseプロジェクトの設定値に書き換えてください。
+    // ※出席簿アプリと同じ設定値を入力してください。
+    // ------------------------------------------
+    const firebaseConfig = {
+      apiKey: "AIzaSyBxriSl6JvV5CfJGEfDUTNXBs9RQJmI28U",
+      authDomain: "hkpointapp.firebaseapp.com",
+      projectId: "hkpointapp",
+      storageBucket: "hkpointapp.firebasestorage.app",
+      messagingSenderId: "696908221772",
+      appId: "1:696908221772:web:0ad30910bd6c7493bbd3e9"
+    };
+
+    // Firebaseの初期化 (設定がダミーでない場合のみ)
+    const isConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY";
+    let db;
+    if (isConfigured) {
+      const app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+    }
+
+    // --- アプリケーションの状態 ---
+    let currentUserId = null; // 現在読み込まれている会員のID
+    let currentBalance = 0;   // 現在のポイント残高
+    let currentUserName = ''; // 現在の会員の名前 (出席簿と連動)
+
+    // --- DOM要素の取得 ---
+    const messageArea = document.getElementById('messageArea');
+    const userIdInput = document.getElementById('userIdInput');
+    
+    // カメラ関連
+    const startCameraBtn = document.getElementById('startCameraBtn');
+    const stopCameraBtn = document.getElementById('stopCameraBtn');
+    const readerDiv = document.getElementById('reader');
+    let html5QrCode = null; // QRスキャナのインスタンス
+
+    // 情報・操作エリア
+    const memberInfo = document.getElementById('memberInfo');
+    const displayUserId = document.getElementById('displayUserId');
+    const displayUserName = document.getElementById('displayUserName');
+    const displayPointBalance = document.getElementById('displayPointBalance');
+    const operationSection = document.getElementById('operationSection');
+    const addPointInput = document.getElementById('addPointInput');
+    const addPointBtn = document.getElementById('addPointBtn');
+    const usePointInput = document.getElementById('usePointInput');
+    const usePointBtn = document.getElementById('usePointBtn');
+    
+    // 【追加】出席ボタンの要素取得
+    const markAttendanceBtn = document.getElementById('markAttendanceBtn');
+
+    // ==========================================
+    // UIユーティリティ
+    // ==========================================
+    
+    // メッセージを表示する関数
+    function showMessage(msg, type = 'success') {
+      messageArea.textContent = msg;
+      messageArea.className = 'p-3 rounded-lg text-sm font-bold text-center transition-all shadow-sm mb-4';
+      messageArea.classList.remove('hidden');
+      
+      if (type === 'error') {
+        messageArea.classList.add('bg-red-100', 'text-red-700', 'border', 'border-red-200');
+      } else {
+        messageArea.classList.add('bg-emerald-100', 'text-emerald-800', 'border', 'border-emerald-200');
+      }
+
+      // 3.5秒後に自動で隠す
+      setTimeout(() => {
+        messageArea.classList.add('hidden');
+      }, 3500);
+    }
+
+    // 会員情報を画面に反映し、操作エリアを有効化する関数
+    function updateUI() {
+      if (currentUserId) {
+        displayUserId.textContent = currentUserId;
+        displayUserName.textContent = currentUserName || '未登録 (出席簿で登録)';
+        displayPointBalance.textContent = currentBalance;
+        memberInfo.classList.remove('hidden');
+        
+        // 操作エリアの有効化 (半透明とクリック不可を解除)
+        operationSection.classList.remove('opacity-50', 'pointer-events-none');
+      }
+    }
+
+    // ==========================================
+    // データベース処理 (読み込み / 新規登録)
+    // ==========================================
+    
+    // 会員データを取得し、未登録なら自動登録する処理
+    async function processUser(uid) {
+      if (!isConfigured) {
+        showMessage('Firebaseが設定されていません。コード内の firebaseConfig を編集してください。', 'error');
+        return;
+      }
+
+      // 検索中表示
+      showMessage(`ID: ${uid} を検索中...`);
+      
+      try {
+        // 保存先を出席簿アプリと同じ 'students' に変更
+        const userRef = doc(db, 'students', uid);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          // 既存会員
+          currentBalance = userSnap.data().pointBalance || 0;
+          currentUserName = userSnap.data().name || '';
+          showMessage('会員データを読み込みました。');
+        } else {
+          // 新規会員: 出席簿側で登録する運用を推奨しますが、QR側でも仮枠を作ります
+          await setDoc(userRef, { pointBalance: 0, sortIndex: 999 }, { merge: true });
+          currentBalance = 0;
+          currentUserName = '仮登録';
+          showMessage('新規会員として仮登録しました。出席簿でも登録してください。');
+        }
+        
+        currentUserId = uid;
+        updateUI();
+        
+        // 操作しやすくするため入力欄をクリア
+        userIdInput.value = '';
+
+      } catch (error) {
+        console.error("データ取得エラー:", error);
+        showMessage('通信エラーが発生しました。ネットワークを確認してください。', 'error');
+      }
+    }
+
+    // ==========================================
+    // 入力トリガー (カメラ / 外部リーダー / 手入力)
+    // ==========================================
+
+    // スマートフォンのカメラでQRコードを読み取る機能
+    startCameraBtn.addEventListener('click', async () => {
+      // スキャナ領域を表示
+      readerDiv.classList.remove('hidden');
+      startCameraBtn.classList.add('hidden');
+      stopCameraBtn.classList.remove('hidden');
+
+      // インスタンス作成
+      if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("reader");
+      }
+
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+      // カメラ起動 (背面カメラを優先)
+      try {
+        await html5QrCode.start(
+          { facingMode: "environment" }, 
+          config,
+          (decodedText) => {
+            // スキャン成功時
+            stopScanner(); // スキャナを停止して非表示に
+            processUser(decodedText); // データベース検索へ
+          },
+          (errorMessage) => {
+            // 読み取り中のエラーは頻繁に出るので無視でOK
+          }
+        );
+      } catch (err) {
+        console.error("カメラ起動エラー:", err);
+        showMessage('カメラの起動に失敗しました。権限を許可してください。', 'error');
+        stopScanner();
+      }
+    });
+
+    // カメラ停止ボタン
+    stopCameraBtn.addEventListener('click', () => {
+      stopScanner();
+    });
+
+    // カメラを停止し、UIを元に戻す関数
+    function stopScanner() {
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().then(() => {
+          readerDiv.classList.add('hidden');
+          stopCameraBtn.classList.add('hidden');
+          startCameraBtn.classList.remove('hidden');
+        }).catch(err => console.error(err));
+      }
+    }
+
+    // 手動入力・外部カードリーダー対応 (Enterキー検知)
+    userIdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const uid = userIdInput.value.trim();
+        if (uid) {
+          processUser(uid); // データベース検索へ
+        }
+      }
+    });
+
+    // ==========================================
+    // ポイント・出席操作ロジック (関数化)
+    // ==========================================
+
+    // 【改善】本日の出席を記録する処理
+    async function executeMarkAttendance() {
+      if (!currentUserId) return;
+
+      const today = new Date();
+      // 出席簿アプリの日付キー生成ロジックに合わせるため、時間を12:00に設定して日付文字列を取得
+      today.setHours(12, 0, 0, 0);
+      const dateKey = today.toISOString().split('T')[0];
+      
+      // 3倍月間判定用のキー (例: "2026-3") ※getMonth()は0始まりなので+1
+      const monthKey = `${today.getFullYear()}-${today.getMonth() + 1}`;
+
+      try {
+        // 1. 既に出席済みか確認する (二重ポイント付与防止)
+        const attendanceRef = doc(db, 'cs_settings', 'attendance');
+        const key = `${currentUserId}_${dateKey}`;
+        const attendanceSnap = await getDoc(attendanceRef);
+        
+        if (attendanceSnap.exists() && attendanceSnap.data()[key] === 'present') {
+          showMessage('本日はすでに出席済みです（ポイントも付与済み）。');
+          return;
+        }
+
+        // 2. 3倍月間かどうかを確認して付与ポイントを決定
+        const bonusRef = doc(db, 'cs_settings', 'bonusMonths');
+        const bonusSnap = await getDoc(bonusRef);
+        let pointsToAdd = 10; // 通常は+10pt
+        if (bonusSnap.exists() && bonusSnap.data()[monthKey]) {
+          pointsToAdd = 30; // 3倍月間なら+30pt
+        }
+
+        // 3. 出席 ('present') を記録
+        await setDoc(attendanceRef, {
+          [key]: 'present'
+        }, { merge: true });
+        
+        // 4. 生徒のポイントを加算
+        const userRef = doc(db, 'students', currentUserId);
+        await updateDoc(userRef, {
+          pointBalance: increment(pointsToAdd)
+        });
+
+        // 5. 画面のポイント残高を更新
+        currentBalance += pointsToAdd;
+        updateUI();
+        
+        showMessage(`出席を記録し、${pointsToAdd}ptを付与しました！`);
+      } catch (error) {
+        console.error("出席記録エラー:", error);
+        showMessage('出席の記録に失敗しました。', 'error');
+      }
+    }
+
+    // ポイントを付与するコア処理
+    async function executeAddPoint(points) {
+      if (!currentUserId) return;
+      
+      if (isNaN(points) || points <= 0) {
+        showMessage('正しいポイント数を入力してください。', 'error');
+        return;
+      }
+
+      try {
+        // 保存先を出席簿アプリと同じ 'students' に変更
+        const userRef = doc(db, 'students', currentUserId);
+        
+        // incrementを使ってアトミックに加算
+        await updateDoc(userRef, {
+          pointBalance: increment(points)
+        });
+        
+        // 成功したら画面の数値を更新
+        currentBalance += points;
+        updateUI();
+        showMessage(`${points} pt を付与しました！`);
+        
+        addPointInput.value = ''; // 入力欄をリセット
+      } catch (error) {
+        console.error("ポイント付与エラー:", error);
+        showMessage('ポイントの付与に失敗しました。', 'error');
+      }
+    }
+
+    // ポイントを使用するコア処理
+    async function executeUsePoint(points) {
+      if (!currentUserId) return;
+      
+      if (isNaN(points) || points <= 0) {
+        showMessage('正しいポイント数を入力してください。', 'error');
+        return;
+      }
+
+      // バリデーション: 使用ポイントが残高を上回っていないかチェック
+      if (points > currentBalance) {
+        showMessage(`残高が不足しています。（現在の残高: ${currentBalance}pt）`, 'error');
+        return;
+      }
+
+      try {
+        // 保存先を出席簿アプリと同じ 'students' に変更
+        const userRef = doc(db, 'students', currentUserId);
+        
+        // incrementを使ってアトミックに減算 (マイナス値を渡す)
+        await updateDoc(userRef, {
+          pointBalance: increment(-points)
+        });
+        
+        // 成功したら画面の数値を更新
+        currentBalance -= points;
+        updateUI();
+        showMessage(`${points} pt を使用しました。`);
+        
+        usePointInput.value = ''; // 入力欄をリセット
+      } catch (error) {
+        console.error("ポイント使用エラー:", error);
+        showMessage('ポイントの使用に失敗しました。', 'error');
+      }
+    }
+
+    // ==========================================
+    // イベントリスナーの登録 (ボタン操作)
+    // ==========================================
+
+    // 【追加】出席記録ボタン
+    markAttendanceBtn.addEventListener('click', () => {
+      executeMarkAttendance();
+    });
+
+    // 手動入力ボタン (付与)
+    addPointBtn.addEventListener('click', () => {
+      const points = parseInt(addPointInput.value, 10);
+      executeAddPoint(points);
+    });
+
+    // 手動入力ボタン (使用)
+    usePointBtn.addEventListener('click', () => {
+      const points = parseInt(usePointInput.value, 10);
+      executeUsePoint(points);
+    });
+
+    // ワンクリック付与ボタン (10〜100)
+    document.querySelectorAll('.quick-add-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const points = parseInt(e.target.dataset.point, 10);
+        executeAddPoint(points);
+      });
+    });
+
+    // ワンクリック使用ボタン (10〜100)
+    document.querySelectorAll('.quick-use-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const points = parseInt(e.target.dataset.point, 10);
+        executeUsePoint(points);
+      });
+    });
+
+  </script>
+</body>
+</html>
